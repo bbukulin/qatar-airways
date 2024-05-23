@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Qatar Airways Routes and Ratings</title>
+        <script src="https://d3js.org/d3.v6.min.js"></script>
+        <script src="https://d3js.org/topojson.v1.min.js"></script>
+        <style>
+            body {
+                font-family: Arial, sans-serif;
+            }
+
+            .chart {
+                display: inline-block;
+                margin: 20px;
+                vertical-align: top;
+                border: 1px solid #ccc;
+                overflow: hidden;
+            }
+
+            .title {
+                font-size: 18px;
+                font-weight: bold;
+                text-align: center;
+            }
+
+            .tooltip {
+                position: absolute;
+                text-align: center;
+                padding: 6px;
+                font-size: 12px;
+                background: lightsteelblue;
+                border: 0px;
+                border-radius: 8px;
+                pointer-events: none;
+            }
+
+            .route {
+                stroke: steelblue;
+                stroke-width: 1;
+                fill: none;
+                opacity: 0.6;
+            }
+
+            .airport {
+                fill: red;
+                stroke: black;
+                stroke-width: 0.5;
+            }
+
+            .highlight {
+                opacity: 1;
+            }
+
+            .fade {
+                opacity: 0.1;
+            }
+
+            #details {
+                width: 300px;
+                display: inline-block;
+                vertical-align: top;
+            }
+
+            #details h4 {
+                margin-top: 0;
+            }
+
+            #details p {
+                margin: 5px 0;
+            }
+
+            .hidden {
+                display: none;
+            }
+        </style>
+    </head>
+
+    <body>
+        <h4>Qatar Airways Routes and Ratings</h4>
+        <div class="chart" id="mapChart" style="width: 960px; height: 600px;"></div>
+        <div id="details">
+            <h4>Destination Details</h4>
+            <p>Select a destination to see details.</p>
+            <button id="resetButton" class="hidden">Reset Map</button>
+        </div>
+
+        <script>
+            const width = 960, height = 600;
+
+            const svg = d3.select("#mapChart").append("svg")
+                .attr("width", width)
+                .attr("height", height)
+                .call(d3.zoom()
+                    .scaleExtent([1, 8])
+                    .on("zoom", zoomed))
+                .append("g");
+
+            const projection = d3.geoMercator()
+                .scale(150)
+                .translate([width / 2, height / 1.5]);
+
+            const path = d3.geoPath().projection(projection);
+
+            const tooltip = d3.select("body").append("div")
+                .attr("class", "tooltip")
+                .style("opacity", 0);
+
+            let allCountries, allRoutes, allAirports;
+
+            // Load and display the world map
+            d3.json("https://d3js.org/world-110m.v1.json").then(function (worldData) {
+                const countries = topojson.feature(worldData, worldData.objects.countries).features;
+
+                allCountries = svg.selectAll(".country")
+                    .data(countries)
+                    .enter().append("path")
+                    .attr("class", "country")
+                    .attr("d", path)
+                    .style("fill", "#ccc")
+                    .style("stroke", "#fff");
+
+                // Load flight routes data
+                d3.csv("notebook/cleaned_qatar_airways_reviews_with_coords.csv").then(function (data) {
+                    // Convert data to numerical values
+                    data.forEach(function (d) {
+                        d.Rating = +d.Rating;
+                        d.FromLon = +d.FromLon;
+                        d.FromLat = +d.FromLat;
+                        d.ToLon = +d.ToLon;
+                        d.ToLat = +d.ToLat;
+                        d.ViaLon = +d.ViaLon;
+                        d.ViaLat = +d.ViaLat;
+                    });
+
+                    const airportData = {};
+                    data.forEach(d => {
+                        if (!airportData[d.To]) {
+                            airportData[d.To] = {
+                                count: 0,
+                                totalRating: 0,
+                                lon: d.ToLon,
+                                lat: d.ToLat,
+                                routes: []
+                            };
+                        }
+                        airportData[d.To].count++;
+                        airportData[d.To].totalRating += d.Rating;
+                        airportData[d.To].routes.push(d.From);
+                    });
+
+                    Object.keys(airportData).forEach(key => {
+                        airportData[key].averageRating = airportData[key].totalRating / airportData[key].count;
+                    });
+
+                    // Draw flight routes including Via
+                    allRoutes = svg.selectAll(".route")
+                        .data(data)
+                        .enter().append("path")
+                        .attr("class", "route")
+                        .attr("d", d => {
+                            const fromLocation = projection([d.FromLon, d.FromLat]);
+                            const viaLocation = projection([d.ViaLon, d.ViaLat]);
+                            const toLocation = projection([d.ToLon, d.ToLat]);
+                            if (d.Via) {
+                                return `M${fromLocation[0]},${fromLocation[1]} Q${viaLocation[0]},${viaLocation[1]} ${toLocation[0]},${toLocation[1]}`;
+                            } else {
+                                return `M${fromLocation[0]},${fromLocation[1]} L${toLocation[0]},${toLocation[1]}`;
+                            }
+                        });
+
+                    // Draw destination airports with ratings
+                    allAirports = svg.selectAll(".airport")
+                        .data(Object.keys(airportData))
+                        .enter().append("circle")
+                        .attr("class", "airport")
+                        .attr("cx", d => projection([airportData[d].lon, airportData[d].lat])[0])
+                        .attr("cy", d => projection([airportData[d].lon, airportData[d].lat])[1])
+                        .attr("r", 5)
+                        .on("mouseover", function (event, d) {
+                            tooltip.transition()
+                                .duration(200)
+                                .style("opacity", .9);
+                            tooltip.html("Destination: " + d + "<br/>" + "Avg Rating: " + airportData[d].averageRating.toFixed(2))
+                                .style("left", (event.pageX + 5) + "px")
+                                .style("top", (event.pageY - 28) + "px");
+
+                            // Highlight routes to this destination
+                            allRoutes.classed("highlight", r => r.To === d)
+                                .classed("fade", r => r.To !== d);
+                        })
+                        .on("mouseout", function (d) {
+                            tooltip.transition()
+                                .duration(500)
+                                .style("opacity", 0);
+
+                            // Reset route highlighting
+                            allRoutes.classed("highlight", false)
+                                .classed("fade", false);
+                        })
+                        .on("click", function (event, d) {
+                            // Hide all routes and airports except the selected destination
+                            allRoutes.classed("hidden", r => r.To !== d && r.From !== d);
+                            allAirports.classed("hidden", a => a !== d);
+
+                            // Show the reset button
+                            d3.select("#resetButton").classed("hidden", false);
+
+                            // Display the details
+                            d3.select("#details").html(`
+                            <h4>Destination: ${d}</h4>
+                            <p>Average Rating: ${airportData[d].averageRating.toFixed(2)}</p>
+                            <p>Total Reviews: ${airportData[d].count}</p>
+                            <p>Routes: ${airportData[d].routes.join(", ")}</p>
+                            <button id="resetButton">Reset Map</button>
+                        `);
+
+                            // Add event listener for reset button
+                            d3.select("#resetButton").on("click", function () {
+                                // Show all routes and airports
+                                allRoutes.classed("hidden", false);
+                                allAirports.classed("hidden", false);
+
+                                // Hide the reset button
+                                d3.select("#resetButton").classed("hidden", true);
+
+                                // Clear details
+                                d3.select("#details").html(`
+                                <h4>Destination Details</h4>
+                                <p>Select a destination to see details.</p>
+                            `);
+                            });
+                        });
+                });
+            });
+
+            function zoomed(event) {
+                const { transform } = event;
+                transform.x = Math.min(
+                    width / 2 * (transform.k - 1),
+                    Math.max(width / 2 * (1 - transform.k), transform.x)
+                );
+                transform.y = Math.min(
+                    height / 2 * (transform.k - 1),
+                    Math.max(height / 2 * (1 - transform.k), transform.y)
+                );
+                svg.attr("transform", transform);
+            }
+        </script>
+    </body>
+
+</html>

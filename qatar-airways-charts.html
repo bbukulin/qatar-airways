@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Qatar Airways Reviews</title>
+        <script src="https://d3js.org/d3.v6.min.js"></script>
+        <style>
+            body {
+                font-family: Arial, sans-serif;
+            }
+
+            .chart {
+                display: inline-block;
+                margin: 20px;
+            }
+
+            .filter {
+                margin-bottom: 20px;
+            }
+
+            svg {
+                font-size: 12px;
+            }
+
+            .axis-label {
+                font-size: 14px;
+                font-weight: normal;
+            }
+
+            .title {
+                font-size: 18px;
+                font-weight: bold;
+                text-align: center;
+            }
+        </style>
+    </head>
+
+    <body>
+        <h4>Qatar Airways Reviews</h4>
+        <div class="filter">
+            <label for="seatTypeFilter">Filter by Seat Type: </label>
+            <select id="seatTypeFilter">
+                <option value="All">All</option>
+            </select>
+        </div>
+        <div class="chart" id="histogram"></div>
+        <div class="chart" id="barChartSeatType"></div>
+
+        <script>
+            // Postavljanje margina i dimenzija za histogram
+            const margin = { top: 20, right: 30, bottom: 40, left: 40 },
+                width = 400 - margin.left - margin.right,
+                height = 400 - margin.top - margin.bottom;
+
+            // Kreiranje SVG elementa za histogram
+            const svg = d3.select("#histogram").append("svg")
+                .attr("width", width + margin.left + margin.right)
+                .attr("height", height + margin.top + margin.bottom)
+                .append("g")
+                .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+
+            // Dodavanje naslova
+            svg.append("text")
+                .attr("class", "title")
+                .attr("x", width / 2)
+                .attr("y", -5)
+                .attr("text-anchor", "middle")
+                .text("Distribution of Qatar Airways Ratings");
+
+            // Dodavanje oznake za x osi
+            svg.append("text")
+                .attr("class", "axis-label")
+                .attr("x", width / 2)
+                .attr("y", height + margin.bottom - 5)
+                .attr("text-anchor", "middle")
+                .text("Rating");
+
+            // Dodavanje oznake za y osi
+            svg.append("text")
+                .attr("class", "axis-label")
+                .attr("x", -height / 2)
+                .attr("y", -30)
+                .attr("transform", "rotate(-90)")
+                .attr("text-anchor", "middle")
+                .text("Frequency");
+
+            // Postavljanje margina i dimenzija za stupčasti grafikon
+            const margin2 = { top: 20, right: 30, bottom: 40, left: 40 },
+                width2 = 400 - margin2.left - margin2.right,
+                height2 = 400 - margin2.top - margin2.bottom;
+
+            // Kreiranje SVG elementa za stupčasti grafikon
+            const svg2 = d3.select("#barChartSeatType").append("svg")
+                .attr("width", width2 + margin2.left + margin2.right)
+                .attr("height", height2 + margin2.top + margin2.bottom)
+                .append("g")
+                .attr("transform", "translate(" + margin2.left + "," + margin2.top + ")");
+
+            // Dodavanje naslova za stupčasti grafikon
+            svg2.append("text")
+                .attr("class", "title")
+                .attr("x", width2 / 2)
+                .attr("y", -5)
+                .attr("text-anchor", "middle")
+                .text("Average Ratings by Seat Type");
+
+            // Dodavanje oznake za x osi za stupčasti grafikon
+            svg2.append("text")
+                .attr("class", "axis-label")
+                .attr("x", width2 / 2)
+                .attr("y", height2 + margin2.bottom - 5)
+                .attr("text-anchor", "middle")
+                .text("Seat Type");
+
+            // Dodavanje oznake za y osi za stupčasti grafikon
+            svg2.append("text")
+                .attr("class", "axis-label")
+                .attr("x", -height2 / 2)
+                .attr("y", -30)
+                .attr("transform", "rotate(-90)")
+                .attr("text-anchor", "middle")
+                .text("Average Rating");
+
+
+
+            // Učitavanje podataka
+            d3.csv("notebook/cleaned_qatar_airways_reviews.csv").then(function (data) {
+                // Pretvaranje podataka u numeričke vrijednosti
+                data.forEach(function (d) {
+                    d.Rating = +d.Rating;
+                });
+
+                // Dodavanje opcija za filter prema tipu sjedala
+                const seatTypes = Array.from(new Set(data.map(d => d['Seat Type'])));
+                seatTypes.forEach(type => {
+                    d3.select("#seatTypeFilter")
+                        .append("option")
+                        .attr("value", type)
+                        .text(type);
+                });
+
+                // Funkcija za ažuriranje histograma
+                function updateHistogram(filteredData) {
+                    svg.selectAll("*").remove();
+
+                    // Ponovno dodavanje naslova i osi
+                    svg.append("text")
+                        .attr("class", "title")
+                        .attr("x", width / 2)
+                        .attr("y", -5)
+                        .attr("text-anchor", "middle")
+                        .text("Distribution of Qatar Airways Ratings");
+
+                    svg.append("text")
+                        .attr("class", "axis-label")
+                        .attr("x", width / 2)
+                        .attr("y", height + margin.bottom - 5)
+                        .attr("text-anchor", "middle")
+                        .text("Rating");
+
+                    svg.append("text")
+                        .attr("class", "axis-label")
+                        .attr("x", -height / 2)
+                        .attr("y", -30)
+                        .attr("transform", "rotate(-90)")
+                        .attr("text-anchor", "middle")
+                        .text("Frequency");
+
+                    // Postavljanje skale za x osi za histogram
+                    const x = d3.scaleLinear()
+                        .domain([0, 10])
+                        .range([0, width]);
+
+                    // Generiranje histogram podataka
+                    const histogram = d3.histogram()
+                        .value(d => d.Rating)
+                        .domain(x.domain())
+                        .thresholds(x.ticks(20));
+
+                    const bins = histogram(filteredData);
+
+                    // Postavljanje skale za y osi za histogram
+                    const y = d3.scaleLinear()
+                        .domain([0, d3.max(bins, d => d.length)])
+                        .range([height, 0]);
+
+                    // Dodavanje x osi za histogram
+                    svg.append("g")
+                        .attr("transform", "translate(0," + height + ")")
+                        .call(d3.axisBottom(x));
+
+                    // Dodavanje y osi za histogram
+                    svg.append("g")
+                        .call(d3.axisLeft(y));
+
+                    // Dodavanje barova u histogram
+                    svg.selectAll("rect")
+                        .data(bins)
+                        .enter().append("rect")
+                        .attr("x", 1)
+                        .attr("transform", d => "translate(" + x(d.x0) + "," + y(d.length) + ")")
+                        .attr("width", d => x(d.x1) - x(d.x0) - 1)
+                        .attr("height", d => height - y(d.length))
+                        .style("fill", "#69b3a2");
+
+                    // Dodavanje oznaka vrijednosti na stupce histograma
+                    /*
+                    svg.selectAll("text.value")
+                        .data(bins)
+                        .enter().append("text")
+                        .attr("class", "value")
+                        .attr("x", d => x(d.x0) + (x(d.x1) - x(d.x0)) / 2)
+                        .attr("y", d => y(d.length) - 5)
+                        .attr("text-anchor", "middle")
+                        .text(d => d.length);
+                    */
+                }
+
+                // Inicijalno prikazivanje histograma sa svim podacima
+                updateHistogram(data);
+
+                // Ažuriranje histograma na osnovu odabranog tipa sjedala
+                d3.select("#seatTypeFilter").on("change", function () {
+                    const selectedType = d3.select(this).property("value");
+                    const filteredData = selectedType === "All" ? data : data.filter(d => d['Seat Type'] === selectedType);
+                    updateHistogram(filteredData);
+                });
+
+                // Grupiranje podataka prema tipu sjedala i izračun prosječne ocjene za stupčasti grafikon
+                const seatTypeData = d3.rollup(data, v => d3.mean(v, d => d.Rating), d => d['Seat Type']);
+
+                // Postavljanje skale za x osi za stupčasti grafikon
+                const x2 = d3.scaleBand()
+                    .domain(Array.from(seatTypeData.keys()))
+                    .range([0, width2])
+                    .padding(0.2);
+
+                // Postavljanje skale za y osi za stupčasti grafikon
+                const y2 = d3.scaleLinear()
+                    .domain([0, 10])
+                    .range([height2, 0]);
+
+                // Dodavanje x osi za stupčasti grafikon
+                svg2.append("g")
+                    .attr("transform", "translate(0," + height2 + ")")
+                    .call(d3.axisBottom(x2));
+
+                // Dodavanje y osi za stupčasti grafikon
+                svg2.append("g")
+                    .call(d3.axisLeft(y2));
+
+                // Dodavanje barova u stupčasti grafikon
+                svg2.selectAll("rect")
+                    .data(seatTypeData)
+                    .enter().append("rect")
+                    .attr("x", d => x2(d[0]))
+                    .attr("y", d => y2(d[1]))
+                    .attr("width", x2.bandwidth())
+                    .attr("height", d => height2 - y2(d[1]))
+                    .style("fill", "#4daf4a");
+
+                // Dodavanje oznaka vrijednosti na stupce stupčastog grafikona
+                svg2.selectAll("text.value")
+                    .data(seatTypeData)
+                    .enter().append("text")
+                    .attr("class", "value")
+                    .attr("x", d => x2(d[0]) + x2.bandwidth() / 2)
+                    .attr("y", d => y2(d[1]) + 15)
+                    .attr("text-anchor", "middle")
+                    .text(d => d[1].toFixed(2));
+            });
+        </script>
+    </body>
+
+</html>
