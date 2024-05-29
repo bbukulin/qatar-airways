@@ -16,9 +16,12 @@
                 margin: 30px;
             }
 
-            .filter {
+            .filter,
+            .toggle {
                 margin-bottom: 20px;
             }
+
+
 
             svg {
                 font-size: 12px;
@@ -57,6 +60,9 @@
             </select>
         </div>
 
+        <div class="toggle">
+            <button id="toggleMedian">Toggle Median</button>
+        </div>
 
         <div class="chart" id="histogram"></div>
         <div class="chart" id="barChartSeatType"></div>
@@ -165,7 +171,6 @@
                 .attr("text-anchor", "middle")
                 .text("Average Rating");
 
-
             // Učitavanje podataka
             d3.csv("notebook/cleaned_qatar_airways_reviews.csv").then(function (data) {
 
@@ -182,7 +187,6 @@
                         .attr("value", type)
                         .text(type);
                 });
-
 
                 // Funkcija za ažuriranje histograma
                 function updateHistogram(filteredData) {
@@ -276,9 +280,12 @@
                 const seatTypeData = d3.rollup(data, v => ({
                     count: v.length,
                     average: d3.mean(v, d => d.Rating),
+                    median: d3.median(v, d => d.Rating)
                 }), d => d['Seat Type']);
 
 
+                /*const seatTypeData = d3.rollup(data, v => d3.mean(v, d => d.Rating), d => d['Seat Type']);
+                */
 
                 // Postavljanje skale za x osi za stupčasti grafikon
                 const x2 = d3.scaleBand()
@@ -301,13 +308,14 @@
                     .call(d3.axisLeft(y2));
 
 
-
+                /*
                 const tooltip = d3.select("body").append("div")
-                    .attr("class", "tooltip")
-                    .style("opacity", 0);
-
+                .attr("class", "tooltip")
+                .style("opacity", 0);
+                */
 
                 // Dodavanje barova u stupčasti grafikon
+                /*
                 svg2.selectAll("rect")
                     .data(seatTypeData)
                     .enter().append("rect")
@@ -329,8 +337,30 @@
                             .duration(500)
                             .style("opacity", 0);
                     });
+                */
 
-
+                svg2.selectAll("rect.average")
+                    .data(seatTypeData)
+                    .enter().append("rect")
+                    .attr("class", "average")
+                    .attr("x", d => x2(d[0]))
+                    .attr("y", d => y2(d[1].average))
+                    .attr("width", x2.bandwidth() / 2)
+                    .attr("height", d => height - y2(d[1].average))
+                    .style("fill", "#74003b")
+                    .on("mouseover", (event, d) => {
+                        tooltip.transition()
+                            .duration(200)
+                            .style("opacity", .9);
+                        tooltip.html(`Seat Type: ${d[0]}<br/>Avg Rating: ${d[1].average.toFixed(2)}<br/>Count: ${d[1].count}`)
+                            .style("left", (event.pageX + 5) + "px")
+                            .style("top", (event.pageY - 28) + "px");
+                    })
+                    .on("mouseout", d => {
+                        tooltip.transition()
+                            .duration(500)
+                            .style("opacity", 0);
+                    });
                 // Dodavanje oznaka vrijednosti na stupce stupčastog grafikona
                 svg2.selectAll("text.value")
                     .data(seatTypeData)
@@ -343,11 +373,45 @@
                     .text(d => d[1].average.toFixed(2));
 
 
+                svg2.selectAll("rect.median")
+                    .data(seatTypeData)
+                    .enter().append("rect")
+                    .attr("class", "median")
+                    .attr("x", d => x2(d[0]) + x2.bandwidth() / 2)
+                    .attr("y", d => y2(d[1].median))
+                    .attr("width", x2.bandwidth() / 2)
+                    .attr("height", d => height - y2(d[1].median))
+                    .style("fill", "#ffab00")
+                    .style("display", "none")
+                    .on("mouseover", (event, d) => {
+                        tooltip.transition()
+                            .duration(200)
+                            .style("opacity", .9);
+                        tooltip.html(`Seat Type: ${d[0]}<br/>Median Rating: ${d[1].median.toFixed(2)}<br/>Count: ${d[1].count}`)
+                            .style("left", (event.pageX + 5) + "px")
+                            .style("top", (event.pageY - 28) + "px");
+                    })
+                    .on("mouseout", d => {
+                        tooltip.transition()
+                            .duration(500)
+                            .style("opacity", 0);
+                    });
+
+                // Toggle button functionality
+                d3.select("#toggleMedian").on("click", function () {
+                    const isVisible = svg2.selectAll("rect.median").style("display") === "none";
+                    svg2.selectAll("rect.median")
+                        .style("display", isVisible ? "block" : "none");
+
+                    svg2.selectAll("rect.average")
+                        .transition()
+                        .duration(500)
+                        .attr("width", isVisible ? x2.bandwidth() / 2 : x2.bandwidth())
+                        .attr("x", d => isVisible ? x2(d[0]) : x2(d[0]) + x2.bandwidth() / 4);
+                });
+
                 // Grupiranje podataka prema tipu putnika i izračun prosječne ocjene za stupčasti grafikon
-                const travellerTypeData = d3.rollup(data, v => ({
-                    count: v.length,
-                    average: d3.mean(v, d => d.Rating)
-                }), d => d['Type Of Traveller']);
+                const travellerTypeData = d3.rollup(data, v => d3.mean(v, d => d.Rating), d => d['Type Of Traveller']);
 
                 // Postavljanje skale za x osi za stupčasti grafikon
                 const x3 = d3.scaleBand()
@@ -374,23 +438,10 @@
                     .data(travellerTypeData)
                     .enter().append("rect")
                     .attr("x", d => x3(d[0]))
-                    .attr("y", d => y3(d[1].average))
+                    .attr("y", d => y3(d[1]))
                     .attr("width", x3.bandwidth())
-                    .attr("height", d => height - y3(d[1].average))
-                    .style("fill", "#ffab00")
-                    .on("mouseover", (event, d) => {
-                        tooltip.transition()
-                            .duration(200)
-                            .style("opacity", .9);
-                        tooltip.html(`Traveller Type: ${d[0]}<br/>Average Rating: ${d[1].average.toFixed(2)}<br/>Based on ${d[1].count} reviews`)
-                            .style("left", (event.pageX + 5) + "px")
-                            .style("top", (event.pageY - 28) + "px");
-                    })
-                    .on("mouseout", d => {
-                        tooltip.transition()
-                            .duration(500)
-                            .style("opacity", 0);
-                    });
+                    .attr("height", d => height - y3(d[1]))
+                    .style("fill", "#ffab00");
 
                 // Dodavanje oznaka vrijednosti na stupce stupčastog grafikona
                 svg3.selectAll("text.value")
@@ -398,10 +449,9 @@
                     .enter().append("text")
                     .attr("class", "value")
                     .attr("x", d => x3(d[0]) + x3.bandwidth() / 2)
-                    .attr("y", d => y3(d[1].average) + 15)
+                    .attr("y", d => y3(d[1]) + 15)
                     .attr("text-anchor", "middle")
-                    .style("fill", "white")
-                    .text(d => d[1].average.toFixed(2));
+                    .text(d => d[1].toFixed(2));
             });
         </script>
     </body>

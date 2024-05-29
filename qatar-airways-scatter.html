@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Correlation Analysis between Variables</title>
+        <script src="https://d3js.org/d3.v6.min.js"></script>
+        <style>
+            body {
+                font-family: Arial, sans-serif;
+            }
+
+            .chart {
+                display: inline-block;
+                margin: 20px;
+                vertical-align: top;
+                border: 1px solid #ccc;
+                overflow: hidden;
+            }
+
+            .title {
+                font-size: 18px;
+                font-weight: bold;
+                text-align: center;
+            }
+
+            .tooltip {
+                position: absolute;
+                text-align: center;
+                padding: 6px;
+                font-size: 12px;
+                background: lightsteelblue;
+                border: 0px;
+                border-radius: 8px;
+                pointer-events: none;
+            }
+
+            .dot {
+                fill-opacity: 0.7;
+            }
+        </style>
+    </head>
+
+    <body>
+        <h4>Correlation Analysis between Seat Type and Ratings</h4>
+        <div class="chart" id="scatterPlotChart" style="width: 960px; height: 500px;"></div>
+
+        <script>
+            const margin = { top: 20, right: 30, bottom: 40, left: 50 },
+                width = 960 - margin.left - margin.right,
+                height = 500 - margin.top - margin.bottom;
+
+            const svg = d3.select("#scatterPlotChart").append("svg")
+                .attr("width", width + margin.left + margin.right)
+                .attr("height", height + margin.top + margin.bottom)
+                .append("g")
+                .attr("transform", `translate(${margin.left},${margin.top})`);
+
+            const x = d3.scalePoint()
+                .range([0, width])
+                .padding(0.5);
+
+            const y = d3.scaleLinear()
+                .range([height, 0]);
+
+            const color = d3.scaleOrdinal(d3.schemeCategory10);
+
+            const tooltip = d3.select("body").append("div")
+                .attr("class", "tooltip")
+                .style("opacity", 0);
+
+            d3.csv("notebook/cleaned_qatar_airways_reviews.csv").then(data => {
+                data.forEach(d => {
+                    d.Rating = +d.Rating;
+                });
+
+                x.domain(data.map(d => d['Seat Type']));
+                y.domain([0, 10]);
+
+                svg.append("g")
+                    .attr("transform", `translate(0,${height})`)
+                    .call(d3.axisBottom(x));
+
+                svg.append("g")
+                    .call(d3.axisLeft(y));
+
+                svg.append("text")
+                    .attr("class", "title")
+                    .attr("x", width / 2)
+                    .attr("y", -10)
+                    .attr("text-anchor", "middle")
+                    .text("Correlation between Seat Type and Ratings");
+
+                svg.append("text")
+                    .attr("class", "axis-label")
+                    .attr("x", width / 2)
+                    .attr("y", height + margin.bottom - 5)
+                    .attr("text-anchor", "middle")
+                    .text("Seat Type");
+
+                svg.append("text")
+                    .attr("class", "axis-label")
+                    .attr("x", -height / 2)
+                    .attr("y", -35)
+                    .attr("transform", "rotate(-90)")
+                    .attr("text-anchor", "middle")
+                    .text("Rating");
+
+                svg.selectAll(".dot")
+                    .data(data)
+                    .enter().append("circle")
+                    .attr("class", "dot")
+                    .attr("cx", d => x(d['Seat Type']))
+                    .attr("cy", d => y(d.Rating))
+                    .attr("r", 5)
+                    .style("fill", d => color(d['Seat Type']))
+                    .on("mouseover", (event, d) => {
+                        tooltip.transition()
+                            .duration(200)
+                            .style("opacity", .9);
+                        tooltip.html(`Seat Type: ${d['Seat Type']}<br/>Rating: ${d.Rating}`)
+                            .style("left", (event.pageX + 5) + "px")
+                            .style("top", (event.pageY - 28) + "px");
+                    })
+                    .on("mouseout", d => {
+                        tooltip.transition()
+                            .duration(500)
+                            .style("opacity", 0);
+                    });
+            });
+        </script>
+    </body>
+
+</html>

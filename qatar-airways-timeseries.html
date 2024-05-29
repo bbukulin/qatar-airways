@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Time Series Trends</title>
+        <script src="https://d3js.org/d3.v6.min.js"></script>
+        <style>
+            body {
+                font-family: Arial, sans-serif;
+            }
+
+            .chart {
+                display: inline-block;
+                margin: 30px;
+            }
+
+            .filter {
+                margin-bottom: 20px;
+            }
+
+            svg {
+                font-size: 12px;
+            }
+
+            .axis-label {
+                font-size: 14px;
+                font-weight: normal;
+            }
+
+            .title {
+                font-size: 18px;
+                font-weight: bold;
+                text-align: center;
+            }
+
+            .tooltip {
+                position: absolute;
+                text-align: center;
+                padding: 6px;
+                font-size: 12px;
+                background: lightsteelblue;
+                border: 0px;
+                border-radius: 8px;
+                pointer-events: none;
+            }
+        </style>
+    </head>
+
+    <body>
+        <h4>Time series</h4>
+
+        <div class="filter">
+            <label for="travellerTypeFilter">Filter by Type Of Traveller: </label>
+            <select id="travellerTypeFilter">
+                <option value="All">All</option>
+            </select>
+        </div>
+
+        <div class="filter">
+            <label for="seatTypeFilter">Filter by Seat Type: </label>
+            <select id="seatTypeFilter">
+                <option value="All">All</option>
+            </select>
+        </div>
+
+
+        <div class="chart" id="monthlyTrendChart"></div>
+        <div class="chart" id="yearlyTrendChart"></div>
+
+        <script>
+            const margin = { top: 20, right: 30, bottom: 60, left: 50 },
+                width = 600 - margin.left - margin.right,
+                height = 400 - margin.top - margin.bottom;
+
+            // SVG element za mjesečne prosječne ocjene
+            const svgMonthly = d3.select("#monthlyTrendChart").append("svg")
+                .attr("width", width + margin.left + margin.right)
+                .attr("height", height + margin.top + margin.bottom)
+                .append("g")
+                .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+
+            svgMonthly.append("text")
+                .attr("class", "title")
+                .attr("x", width / 2)
+                .attr("y", -10)
+                .attr("text-anchor", "middle")
+                .text("Monthly Average Ratings");
+
+            // SVG element za godišnje prosječne ocjene
+            const svgYearly = d3.select("#yearlyTrendChart").append("svg")
+                .attr("width", width + margin.left + margin.right)
+                .attr("height", height + margin.top + margin.bottom)
+                .append("g")
+                .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+
+            svgYearly.append("text")
+                .attr("class", "title")
+                .attr("x", width / 2)
+                .attr("y", -10)
+                .attr("text-anchor", "middle")
+                .text("Yearly Average Ratings");
+
+            const tooltip = d3.select("body").append("div")
+                .attr("class", "tooltip")
+                .style("opacity", 0);
+
+            d3.csv("notebook/cleaned_qatar_airways_reviews.csv").then(function (data) {
+                data.forEach(function (d) {
+                    d['Date Published'] = new Date(d['Date Published']);
+                    d.Rating = +d.Rating;
+                });
+
+                // Popuniti padajuće izbornike s jedinstvenim vrijednostima
+                const travellerTypes = Array.from(new Set(data.map(d => d['Type Of Traveller'])));
+                const seatTypes = Array.from(new Set(data.map(d => d['Seat Type'])));
+
+                travellerTypes.forEach(type => {
+                    d3.select("#travellerTypeFilter")
+                        .append("option")
+                        .attr("value", type)
+                        .text(type);
+                });
+
+                seatTypes.forEach(type => {
+                    d3.select("#seatTypeFilter")
+                        .append("option")
+                        .attr("value", type)
+                        .text(type);
+                });
+
+                // Funkcija za filtriranje podataka
+                function filterData(data) {
+                    const selectedTravellerType = d3.select("#travellerTypeFilter").property("value");
+                    const selectedSeatType = d3.select("#seatTypeFilter").property("value");
+
+                    return data.filter(d => {
+                        return (selectedTravellerType === "All" || d['Type Of Traveller'] === selectedTravellerType) &&
+                            (selectedSeatType === "All" || d['Seat Type'] === selectedSeatType);
+                    });
+                }
+
+                // Funkcija za ažuriranje grafikona
+                function updateCharts(filteredData) {
+                    // Grupiranje po mjesecu i izračun prosječne ocjene
+                    const monthlyData = d3.rollup(filteredData, v => d3.mean(v, d => d.Rating), d => d3.timeMonth(d['Date Published']));
+                    const monthlyDataArray = Array.from(monthlyData, ([date, rating]) => ({ date, rating }));
+
+                    // Grupiranje po godini i izračun prosječne ocjene
+                    const yearlyData = d3.rollup(filteredData, v => d3.mean(v, d => d.Rating), d => d['Date Published'].getFullYear());
+                    const yearlyDataArray = Array.from(yearlyData, ([year, rating]) => ({ year, rating }));
+
+                    // Ažuriranje mjesečnog grafikona
+                    const xScaleMonthly = d3.scaleTime()
+                        .domain(d3.extent(monthlyDataArray, d => d.date))
+                        .range([0, width]);
+
+                    const yScaleMonthly = d3.scaleLinear()
+                        .domain([0, 10])
+                        .range([height, 0]);
+
+                    svgMonthly.selectAll("*").remove();
+
+                    svgMonthly.append("g")
+                        .attr("transform", "translate(0," + height + ")")
+                        .call(d3.axisBottom(xScaleMonthly).tickFormat(d3.timeFormat("%b %Y")).ticks(6))
+                        .selectAll("text")
+                        .attr("transform", "rotate(-45)")
+                        .style("text-anchor", "end");
+
+                    svgMonthly.append("g")
+                        .call(d3.axisLeft(yScaleMonthly));
+
+                    svgMonthly.append("text")
+                        .attr("class", "axis-label")
+                        .attr("x", width / 2)
+                        .attr("y", height + 60)
+                        .attr("text-anchor", "middle")
+                        .text("Month + Year");
+
+                    svgMonthly.append("text")
+                        .attr("class", "axis-label")
+                        .attr("x", -height / 2)
+                        .attr("y", -40)
+                        .attr("transform", "rotate(-90)")
+                        .attr("text-anchor", "middle")
+                        .text("Average Rating");
+
+                    const lineMonthly = d3.line()
+                        .x(d => xScaleMonthly(d.date))
+                        .y(d => yScaleMonthly(d.rating));
+
+                    svgMonthly.append("path")
+                        .datum(monthlyDataArray)
+                        .attr("fill", "none")
+                        .attr("stroke", "steelblue")
+                        .attr("stroke-width", 1.5)
+                        .attr("d", lineMonthly);
+
+                    svgMonthly.selectAll("circle")
+                        .data(monthlyDataArray)
+                        .enter().append("circle")
+                        .attr("cx", d => xScaleMonthly(d.date))
+                        .attr("cy", d => yScaleMonthly(d.rating))
+                        .attr("r", 3)
+                        .attr("fill", "steelblue")
+                        .on("mouseover", function (event, d) {
+                            const filtered = filteredData.filter(f => d3.timeMonth(f['Date Published']).getTime() === d.date.getTime());
+                            const typesOfTraveller = Array.from(new Set(filtered.map(f => f['Type Of Traveller'])));
+                            const seatTypes = Array.from(new Set(filtered.map(f => f['Seat Type'])));
+                            tooltip.transition()
+                                .duration(200)
+                                .style("opacity", .9);
+                            tooltip.html("Date: " + d3.timeFormat("%B %Y")(d.date) + "<br/>Rating: " + d.rating.toFixed(2) +
+                                "<br/>Types Of Traveller: " + typesOfTraveller.join(", ") +
+                                "<br/>Seat Types: " + seatTypes.join(", "))
+                                .style("left", (event.pageX + 5) + "px")
+                                .style("top", (event.pageY - 28) + "px");
+                        })
+                        .on("mouseout", function (d) {
+                            tooltip.transition()
+                                .duration(500)
+                                .style("opacity", 0);
+                        });
+
+                    // Ažuriranje godišnjeg grafikona
+                    const xScaleYearly = d3.scaleTime()
+                        .domain(d3.extent(yearlyDataArray, d => new Date(d.year, 0, 1)))
+                        .range([0, width]);
+
+                    const yScaleYearly = d3.scaleLinear()
+                        .domain([0, 10])
+                        .range([height, 0]);
+
+                    svgYearly.selectAll("*").remove();
+
+                    svgYearly.append("g")
+                        .attr("transform", "translate(0," + height + ")")
+                        .call(d3.axisBottom(xScaleYearly).tickFormat(d3.timeFormat("%Y")).ticks(yearlyDataArray.length));
+
+                    svgYearly.append("g")
+                        .call(d3.axisLeft(yScaleYearly));
+
+                    svgYearly.append("text")
+                        .attr("class", "axis-label")
+                        .attr("x", width / 2)
+                        .attr("y", height + 60)
+                        .attr("text-anchor", "middle")
+                        .text("Year");
+
+                    svgYearly.append("text")
+                        .attr("class", "axis-label")
+                        .attr("x", -height / 2)
+                        .attr("y", -40)
+                        .attr("transform", "rotate(-90)")
+                        .attr("text-anchor", "middle")
+                        .text("Average Rating");
+
+                    const lineYearly = d3.line()
+                        .x(d => xScaleYearly(new Date(d.year, 0, 1)))
+                        .y(d => yScaleYearly(d.rating));
+
+                    svgYearly.append("path")
+                        .datum(yearlyDataArray)
+                        .attr("fill", "none")
+                        .attr("stroke", "orange")
+                        .attr("stroke-width", 1.5)
+                        .attr("d", lineYearly);
+
+                    svgYearly.selectAll("circle")
+                        .data(yearlyDataArray)
+                        .enter().append("circle")
+                        .attr("cx", d => xScaleYearly(new Date(d.year, 0, 1)))
+                        .attr("cy", d => yScaleYearly(d.rating))
+                        .attr("r", 3)
+                        .attr("fill", "orange")
+                        .on("mouseover", function (event, d) {
+                            const filtered = filteredData.filter(f => f['Date Published'].getFullYear() === d.year);
+                            const typesOfTraveller = Array.from(new Set(filtered.map(f => f['Type Of Traveller'])));
+                            const seatTypes = Array.from(new Set(filtered.map(f => f['Seat Type'])));
+                            tooltip.transition()
+                                .duration(200)
+                                .style("opacity", .9);
+                            tooltip.html("Year: " + d.year + "<br/>Rating: " + d.rating.toFixed(2) +
+                                "<br/>Types Of Traveller: " + typesOfTraveller.join(", ") +
+                                "<br/>Seat Types: " + seatTypes.join(", "))
+                                .style("left", (event.pageX + 5) + "px")
+                                .style("top", (event.pageY - 28) + "px");
+                        })
+                        .on("mouseout", function (d) {
+                            tooltip.transition()
+                                .duration(500)
+                                .style("opacity", 0);
+                        });
+                }
+
+                // Inicijalno ažuriranje grafikona
+                updateCharts(data);
+
+                // Ažuriranje grafikona pri promjeni filtera
+                d3.select("#travellerTypeFilter").on("change", function () {
+                    const filteredData = filterData(data);
+                    updateCharts(filteredData);
+                });
+
+                d3.select("#seatTypeFilter").on("change", function () {
+                    const filteredData = filterData(data);
+                    updateCharts(filteredData);
+                });
+            });
+        </script>
+    </body>
+
+</html>

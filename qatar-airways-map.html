@@ -45,7 +45,6 @@
             }
 
             .airport {
-                fill: red;
                 stroke: black;
                 stroke-width: 0.5;
             }
@@ -155,6 +154,10 @@
                         airportData[key].averageRating = airportData[key].totalRating / airportData[key].count;
                     });
 
+                    // Define color scale for heatmap
+                    const colorScale = d3.scaleSequential(d3.interpolateReds)
+                        .domain([0, 10]);
+
                     // Draw flight routes including Via
                     allRoutes = svg.selectAll(".route")
                         .data(data)
@@ -179,6 +182,7 @@
                         .attr("cx", d => projection([airportData[d].lon, airportData[d].lat])[0])
                         .attr("cy", d => projection([airportData[d].lon, airportData[d].lat])[1])
                         .attr("r", 5)
+                        .style("fill", d => colorScale(airportData[d].averageRating))
                         .on("mouseover", function (event, d) {
                             tooltip.transition()
                                 .duration(200)
@@ -247,6 +251,10 @@
                     Math.max(height / 2 * (1 - transform.k), transform.y)
                 );
                 svg.attr("transform", transform);
+
+                // Update the radius of the airports based on the zoom level
+                svg.selectAll(".airport")
+                    .attr("r", 6 / transform.k);
             }
         </script>
     </body>
