@@ -38,14 +38,14 @@
             }
 
             .route {
-                stroke: steelblue;
+                stroke: #8a55702a;
                 stroke-width: 1;
                 fill: none;
-                opacity: 0.6;
+                opacity: 0.9;
             }
 
             .airport {
-                stroke: black;
+                stroke: #74003b;
                 stroke-width: 0.5;
             }
 
@@ -74,12 +74,31 @@
             .hidden {
                 display: none;
             }
+
+
+            .start-point {
+                fill: black;
+            }
+
+            .via-point {
+                fill: none;
+                stroke: blue;
+                stroke-width: 1.5;
+            }
+
+            .legend {
+                font-size: 12px;
+            }
+
+            .legend rect {
+                stroke-width: 0;
+            }
         </style>
     </head>
 
     <body>
         <h4>Qatar Airways Routes and Ratings</h4>
-        <div class="chart" id="mapChart" style="width: 960px; height: 600px;"></div>
+        <div class="chart" id="mapChart" style="width: 1200px; height: 600px;"></div>
         <div id="details">
             <h4>Destination Details</h4>
             <p>Select a destination to see details.</p>
@@ -87,7 +106,7 @@
         </div>
 
         <script>
-            const width = 960, height = 600;
+            const width = 1200, height = 600;
 
             const svg = d3.select("#mapChart").append("svg")
                 .attr("width", width)
@@ -95,10 +114,11 @@
                 .call(d3.zoom()
                     .scaleExtent([1, 8])
                     .on("zoom", zoomed))
-                .append("g");
+                .append("g")
+                .call(d3.drag().on("drag", dragged));
 
             const projection = d3.geoMercator()
-                .scale(150)
+                .scale(200)
                 .translate([width / 2, height / 1.5]);
 
             const path = d3.geoPath().projection(projection);
@@ -107,7 +127,7 @@
                 .attr("class", "tooltip")
                 .style("opacity", 0);
 
-            let allCountries, allRoutes, allAirports;
+            let allCountries, allRoutes, allAirports, startPoints, viaPoints;
 
             // Load and display the world map
             d3.json("https://d3js.org/world-110m.v1.json").then(function (worldData) {
@@ -122,7 +142,7 @@
                     .style("stroke", "#fff");
 
                 // Load flight routes data
-                d3.csv("notebook/cleaned_qatar_airways_reviews_with_coords.csv").then(function (data) {
+                d3.csv("notebook/updated_cleaned_qatar_airways_reviews_with_coords.csv").then(function (data) {
                     // Convert data to numerical values
                     data.forEach(function (d) {
                         d.Rating = +d.Rating;
@@ -130,11 +150,12 @@
                         d.FromLat = +d.FromLat;
                         d.ToLon = +d.ToLon;
                         d.ToLat = +d.ToLat;
-                        d.ViaLon = +d.ViaLon;
-                        d.ViaLat = +d.ViaLat;
+                        d.ViaLon = d.ViaLon !== NaN ? +d.ViaLon : null;
+                        d.ViaLat = d.ViaLat !== NaN ? +d.ViaLat : null;
                     });
 
                     const airportData = {};
+
                     data.forEach(d => {
                         if (!airportData[d.To]) {
                             airportData[d.To] = {
@@ -158,17 +179,21 @@
                     const colorScale = d3.scaleSequential(d3.interpolateReds)
                         .domain([0, 10]);
 
+                    // Get unique routes
+                    const uniqueRoutes = Array.from(d3.rollups(data, v => v[0], d => `${d.From}-${d.Via}-${d.To}`), d => d[1]);
+
                     // Draw flight routes including Via
                     allRoutes = svg.selectAll(".route")
-                        .data(data)
+                        .data(uniqueRoutes)
                         .enter().append("path")
                         .attr("class", "route")
                         .attr("d", d => {
                             const fromLocation = projection([d.FromLon, d.FromLat]);
-                            const viaLocation = projection([d.ViaLon, d.ViaLat]);
                             const toLocation = projection([d.ToLon, d.ToLat]);
-                            if (d.Via) {
-                                return `M${fromLocation[0]},${fromLocation[1]} Q${viaLocation[0]},${viaLocation[1]} ${toLocation[0]},${toLocation[1]}`;
+
+                            if (d.ViaLat && d.ViaLon) {
+                                const viaLocation = projection([d.ViaLon, d.ViaLat]);
+                                return `M${fromLocation[0]},${fromLocation[1]} L${viaLocation[0]},${viaLocation[1]} L${toLocation[0]},${toLocation[1]}`;
                             } else {
                                 return `M${fromLocation[0]},${fromLocation[1]} L${toLocation[0]},${toLocation[1]}`;
                             }
@@ -206,20 +231,58 @@
                         })
                         .on("click", function (event, d) {
                             // Hide all routes and airports except the selected destination
-                            allRoutes.classed("hidden", r => r.To !== d && r.From !== d);
+                            allRoutes.classed("hidden", r => r.To !== d && r.From !== d && !(r.Via === d));
                             allAirports.classed("hidden", a => a !== d);
 
                             // Show the reset button
                             d3.select("#resetButton").classed("hidden", false);
 
-                            // Display the details
+                            const routes = data.filter(r => r.To === d);
+                            const routeDetails = routes.map(r => {
+                                return `
+                                <p>From: ${r.From}</p>
+                                ${r.Via ? `<p>Via: ${r.Via}</p>` : ""}
+                                <p>To: ${r.To}</p>
+                                <p>Author: ${r.Author}</p>
+                                <p>Review: ${r.Review_Body}</p>
+                            `;
+                            }).join("<br>");
+
                             d3.select("#details").html(`
+                            <button id="resetButton">Reset Map</button>
                             <h4>Destination: ${d}</h4>
                             <p>Average Rating: ${airportData[d].averageRating.toFixed(2)}</p>
                             <p>Total Reviews: ${airportData[d].count}</p>
-                            <p>Routes: ${airportData[d].routes.join(", ")}</p>
-                            <button id="resetButton">Reset Map</button>
-                        `);
+                            ${routeDetails}
+                            `);
+
+                            // Filter and show relevant routes
+                            allRoutes.classed("hidden", r => r.To !== d && r.From !== d && !(r.Via === d));
+
+                            // Add start and via points for relevant routes
+                            const startPointsData = routes.map(r => ({ lon: r.FromLon, lat: r.FromLat }));
+
+                            const viaPointsData = routes.filter(r => r.ViaLat && r.ViaLon).map(r => ({ lon: r.ViaLon, lat: r.ViaLat }));
+
+
+
+                            startPoints = svg.selectAll(".start-point")
+                                .data(startPointsData)
+                                .enter().append("circle")
+                                .attr("class", "start-point")
+                                .attr("cx", d => projection([d.lon, d.lat])[0])
+                                .attr("cy", d => projection([d.lon, d.lat])[1])
+                                .attr("r", 5)
+                                .attr("fill", "black");
+
+                            viaPoints = svg.selectAll(".via-point")
+                                .data(viaPointsData)
+                                .enter().append("circle")
+                                .attr("class", "via-point")
+                                .attr("cx", d => projection([d.lon, d.lat])[0])
+                                .attr("cy", d => projection([d.lon, d.lat])[1])
+                                .attr("r", 5);
+
 
                             // Add event listener for reset button
                             d3.select("#resetButton").on("click", function () {
@@ -227,16 +290,54 @@
                                 allRoutes.classed("hidden", false);
                                 allAirports.classed("hidden", false);
 
+                                // Remove start points
+                                startPoints.remove();
+                                viaPoints.remove();
+
                                 // Hide the reset button
                                 d3.select("#resetButton").classed("hidden", true);
 
                                 // Clear details
                                 d3.select("#details").html(`
-                                <h4>Destination Details</h4>
-                                <p>Select a destination to see details.</p>
+                                <h4> Destination Details</h4>
+                                    <p>Select a destination to see details.</p>
                             `);
                             });
                         });
+
+                    // Draw legend
+                    const legend = svg.append("g")
+                        .attr("class", "legend")
+                        .attr("transform", `translate(${width - 150}, 20)`);
+
+                    const legendData = [
+                        { color: colorScale(0), label: "0-2" },
+                        { color: colorScale(2), label: "2-4" },
+                        { color: colorScale(4), label: "4-6" },
+                        { color: colorScale(6), label: "6-8" },
+                        { color: colorScale(8), label: "8-10" },
+                        { color: "blue", label: "Stopover", type: "via" },
+                        { color: "black", label: "Start Point", type: "start" }
+                    ];
+
+                    legend.selectAll("rect")
+                        .data(legendData)
+                        .enter().append("rect")
+                        .attr("x", 0)
+                        .attr("y", (d, i) => i * 20)
+                        .attr("width", 18)
+                        .attr("height", 18)
+                        .attr("fill", d => d.color)
+                        .attr("stroke", d => d.type === "via" ? d.color : null)
+                        .attr("stroke-width", d => d.type === "via" ? 1.5 : 0);
+
+                    legend.selectAll("text")
+                        .data(legendData)
+                        .enter().append("text")
+                        .attr("x", 24)
+                        .attr("y", (d, i) => i * 20 + 9)
+                        .attr("dy", "0.35em")
+                        .text(d => d.label);
                 });
             });
 
@@ -255,6 +356,21 @@
                 // Update the radius of the airports based on the zoom level
                 svg.selectAll(".airport")
                     .attr("r", 6 / transform.k);
+
+                // Update the radius of the start points based on the zoom level
+                svg.selectAll(".start-point")
+                    .attr("r", 6 / transform.k);
+
+                svg.selectAll(".via-point")
+                    .attr("r", 6 / transform.k);
+            }
+
+            function dragged(event) {
+                const { dx, dy } = event;
+                const currentTransform = d3.zoomTransform(svg.node());
+                currentTransform.x += dx;
+                currentTransform.y += dy;
+                svg.attr("transform", currentTransform);
             }
         </script>
     </body>

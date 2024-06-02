@@ -246,7 +246,7 @@
                         .attr("transform", d => "translate(" + x(d.x0) + "," + y(d.length) + ")")
                         .attr("width", d => x(d.x1) - x(d.x0) - 1)
                         .attr("height", d => height - y(d.length))
-                        .style("fill", "#69b3a2");
+                        .style("fill", "#74003b");
 
                     // Dodavanje oznaka vrijednosti na stupce histograma
                     /*
@@ -377,7 +377,7 @@
                     .attr("y", d => y3(d[1].average))
                     .attr("width", x3.bandwidth())
                     .attr("height", d => height - y3(d[1].average))
-                    .style("fill", "#ffab00")
+                    .style("fill", "#74003b")
                     .on("mouseover", (event, d) => {
                         tooltip.transition()
                             .duration(200)
